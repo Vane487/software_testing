@@ -146,26 +146,30 @@ class CarRentalServiceTest {
     }
 
     @Test
-    void process_age75IsRejected_counterRequirement() {
-        // Вимога: вік 21-75 включно. Реалізація помилково встановлює максимум 74.
+    void process_age75_acceptsUpperBoundary() {
         CarRentalService.Request request = new CarRentalService.Request(75, 5, false, false);
+        when(fleet.isAvailable()).thenReturn(true);
 
-        assertThrows(IllegalArgumentException.class, () -> service.process(request));
+        CarRentalService.Result result = service.process(request);
 
-        verifyNoInteractions(fleet, history, rentals);
+        assertAll(
+                () -> assertEquals("Оформлено", result.status()),
+                () -> assertEquals(250_000L, result.rental()),
+                () -> assertEquals(450_000L, result.total())
+        );
+        verify(rentals).save(request, result);
     }
 
     @Test
-    void process_sevenDaysHaveNoDiscount_counterRequirement() {
-        // Вимога: знижка діє з 7 діб. Реалізація застосовує її лише коли days > 7.
+    void process_sevenDays_appliesDiscount() {
         CarRentalService.Request request = new CarRentalService.Request(40, 7, false, false);
         when(fleet.isAvailable()).thenReturn(true);
 
         CarRentalService.Result result = service.process(request);
 
         assertAll(
-                () -> assertEquals(350_000L, result.rental()),
-                () -> assertEquals(550_000L, result.total())
+                () -> assertEquals(315_000L, result.rental()),
+                () -> assertEquals(515_000L, result.total())
         );
         verify(rentals).save(request, result);
     }
@@ -175,18 +179,23 @@ class CarRentalServiceTest {
             "23, false",
             "40, true"
     })
-    void process_historyIsSkippedWhenExactlyOneTriggerApplies_counterRequirement(
+    void process_historyIsCheckedWhenExactlyOneTriggerApplies(
             int age,
             boolean premium
     ) {
-        // Вимога: історія перевіряється для young OR premium. У коді використано AND.
         CarRentalService.Request request = new CarRentalService.Request(age, 3, premium, false);
         when(fleet.isAvailable()).thenReturn(true);
+        when(history.hasIncident()).thenReturn(true);
 
         CarRentalService.Result result = service.process(request);
 
-        assertEquals("Оформлено", result.status());
-        verifyNoInteractions(history);
-        verify(rentals).save(request, result);
+        assertAll(
+                () -> assertEquals(
+                        new CarRentalService.Result("Відмова за історією", 0, 0, 0, 0, 0),
+                        result
+                ),
+                () -> verify(history).hasIncident(),
+                () -> verifyNoInteractions(rentals)
+        );
     }
 }
