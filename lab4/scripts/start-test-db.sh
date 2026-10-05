@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS does not provide the Linux-style C.UTF-8 locale. PostgreSQL refuses
+# to start when that invalid locale is inherited from the terminal.
+export LANG=C
+export LC_ALL=C
+
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 data_dir="$project_dir/.postgres-data"
 log_file="$project_dir/.postgres.log"
