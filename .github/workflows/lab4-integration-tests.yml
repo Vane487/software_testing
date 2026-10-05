@@ -46,7 +46,9 @@ jobs:
           cache-dependency-path: lab4/pom.xml
 
       - name: Apply database migration
-        run: psql -v ON_ERROR_STOP=1 -f migrations/V1__create_tables.sql
+        run: >-
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME"
+          -v ON_ERROR_STOP=1 -f migrations/V1__create_tables.sql
 
       - name: Run complete integration test suite
         run: mvn -B test
