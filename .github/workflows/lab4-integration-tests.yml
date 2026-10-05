@@ -1,0 +1,52 @@
+name: Lab 4 Integration Tests
+
+on:
+  push:
+    paths:
+      - "lab4/**"
+      - ".github/workflows/lab4-integration-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab4
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: courses_variant04_test
+      DB_USER: courses_student
+      DB_PASSWORD: courses_password
+      PGPASSWORD: courses_password
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: courses_variant04_test
+          POSTGRES_USER: courses_student
+          POSTGRES_PASSWORD: courses_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U courses_student -d courses_variant04_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: lab4/pom.xml
+
+      - name: Apply database migration
+        run: psql -v ON_ERROR_STOP=1 -f migrations/V1__create_tables.sql
+
+      - name: Run complete integration test suite
+        run: mvn -B test
