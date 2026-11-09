@@ -1,0 +1,123 @@
+name: Lab 9 CI and Continuous Testing
+
+on:
+  push:
+    paths:
+      - "lab9/**"
+      - ".github/workflows/lab9-ci.yml"
+  pull_request:
+    paths:
+      - "lab9/**"
+      - ".github/workflows/lab9-ci.yml"
+  workflow_dispatch:
+    inputs:
+      demonstrate_failure:
+        description: "Run the intentional failing test"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lab9-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build application
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab9
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: lab9/pom.xml
+
+      - name: Compile and package
+        run: mvn -B -DskipTests package
+
+      - name: Upload application package
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab9-application-${{ github.run_id }}
+          path: lab9/target/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
+  unit-tests:
+    name: Unit tests
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab9
+    env:
+      DEMO_FAILURE: ${{ github.event_name == 'workflow_dispatch' && inputs.demonstrate_failure || 'false' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: lab9/pom.xml
+
+      - name: Run unit tests
+        run: >-
+          mvn -B
+          -Dtest=EnrollmentServiceUnitTest,IntentionalFailureDemoTest
+          -Ddemo.failure="$DEMO_FAILURE"
+          test
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab9-unit-test-report-${{ github.run_id }}
+          path: lab9/target/surefire-reports/**
+          if-no-files-found: warn
+          retention-days: 14
+
+  integration-tests:
+    name: Integration tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab9
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: lab9/pom.xml
+
+      - name: Run Testcontainers integration suite
+        run: mvn -B -Pregression test
+
+      - name: Upload integration test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab9-integration-test-report-${{ github.run_id }}
+          path: lab9/target/surefire-reports/**
+          if-no-files-found: error
+          retention-days: 14
